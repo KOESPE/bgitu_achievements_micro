@@ -1,0 +1,4 @@
+.env
+/data/auth_token.json
+/.idea
+/log.log
