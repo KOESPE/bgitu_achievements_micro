@@ -53,15 +53,34 @@ async def get_filters():
     return data
 
 
-def aggregate_ratings(data):
+def aggregate_ratings(data, filters=None):
     students = {}
     group_map = {g["id"]: g["name"] for g in data["groups"]}
     category_map = {c["categoryID"]: c["description"] for c in data["categories"]}
 
-    query = jmespath.compile("listWorks[*].{studentID: studentID, fullName: fullName, groupID: groupID, categoryID: categoryID, ballOfWork: ballOfWork}")
+    achievement_categories = {}
+    achievement_category_filter = filters.get("achievementCategory")
+    if achievement_category_filter is not None:
+        achievement_categories = {
+            item["value"]: item["name"] for item in achievement_category_filter
+        }
+
+    faculty_filter = {
+        item["value"] for item in (filters.get("faculty") if filters else [])
+    }
+
+    query = jmespath.compile(
+        "listWorks[*].{studentID: studentID, fullName: fullName, groupID: groupID, categoryID: categoryID, ballOfWork: ballOfWork, faculID: faculID}"
+    )
     works = query.search(data)
 
     for work in works:
+        if work["ballOfWork"] <= 0:
+            continue
+
+        if faculty_filter and work["faculID"] not in faculty_filter:
+            continue
+
         student_id = work["studentID"]
         if student_id not in students:
             students[student_id] = {
@@ -69,10 +88,13 @@ def aggregate_ratings(data):
                 "studentId": student_id,
                 "groupName": group_map.get(work["groupID"], "Неизвестно"),
                 "verifiedScore": 0,
-                "verifiedData": {}
+                "verifiedData": {},
             }
 
         category_name = category_map.get(work["categoryID"], "Прочее")
+        if achievement_categories and work["categoryID"] not in achievement_categories:
+            continue
+
         students[student_id]["verifiedData"].setdefault(category_name, 0)
         students[student_id]["verifiedData"][category_name] += work["ballOfWork"]
         students[student_id]["verifiedScore"] += work["ballOfWork"]
@@ -86,7 +108,6 @@ def aggregate_ratings(data):
         result.append(student)
 
     return result
-
 
 
 @ratings_router.get("/")
@@ -108,19 +129,24 @@ async def get_ratings(
             data = await req.json()
 
             if raw_data is None:
-                raw_data = data["data"]  # Первый ответ просто принимаем за основу
+                raw_data = data["data"]
             else:
                 raw_data = merge_json(raw_data, data["data"])
     ic(raw_data)
     ic(time.time() - time_start)
 
-    ratings = aggregate_ratings(raw_data)
+    filters = {}
+    if achievementCategory:
+        filters["achievementCategory"] = [
+            {"value": achievementCategory}
+        ]  # Оборачиваем в список, как ты и ожидал
+    if faculty:
+        filters["faculty"] = [
+            {"value": faculty}
+        ]  # Оборачиваем в список, как ты и ожидал
+
+    ratings = aggregate_ratings(
+        raw_data, filters=filters
+    )  # Передаем фильтры в aggregate_ratings
     ic(ratings)
     return ratings
-
-    if achievementCategory:
-        ...
-    if faculty:
-        ...
-
-
