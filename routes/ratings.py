@@ -58,16 +58,19 @@ def aggregate_ratings(data, filters=None):
     group_map = {g["id"]: g["name"] for g in data["groups"]}
     category_map = {c["categoryID"]: c["description"] for c in data["categories"]}
 
-    achievement_categories = {}
+    # Получаем список achievementCategory из фильтров
     achievement_category_filter = filters.get("achievementCategory")
-    if achievement_category_filter is not None:
-        achievement_categories = {
-            item["value"]: item["name"] for item in achievement_category_filter
-        }
+    achievement_category_values = (
+        {item["value"] for item in achievement_category_filter}
+        if achievement_category_filter
+        else None
+    )
 
-    faculty_filter = {
-        item["value"] for item in (filters.get("faculty") if filters else [])
-    }
+    # Получаем значение faculty из фильтров
+    faculty_filter = filters.get("faculty")
+    faculty_value = faculty_filter[0][
+        "value"
+    ] if faculty_filter else None  # Извлекаем значение из списка
 
     query = jmespath.compile(
         "listWorks[*].{studentID: studentID, fullName: fullName, groupID: groupID, categoryID: categoryID, ballOfWork: ballOfWork, faculID: faculID}"
@@ -78,7 +81,15 @@ def aggregate_ratings(data, filters=None):
         if work["ballOfWork"] <= 0:
             continue
 
-        if faculty_filter and work["faculID"] not in faculty_filter:
+        # Проверяем faculty
+        if faculty_value and work["faculID"] != faculty_value:
+            continue
+
+        # Проверяем achievementCategory
+        if (
+            achievement_category_values
+            and work["categoryID"] not in achievement_category_values
+        ):
             continue
 
         student_id = work["studentID"]
@@ -92,8 +103,6 @@ def aggregate_ratings(data, filters=None):
             }
 
         category_name = category_map.get(work["categoryID"], "Прочее")
-        if achievement_categories and work["categoryID"] not in achievement_categories:
-            continue
 
         students[student_id]["verifiedData"].setdefault(category_name, 0)
         students[student_id]["verifiedData"][category_name] += work["ballOfWork"]
@@ -109,10 +118,9 @@ def aggregate_ratings(data, filters=None):
 
     return result
 
-
 @ratings_router.get("/")
 async def get_ratings(
-    achievementCategory: Optional[int] = Query(default=None),
+    achievementCategory: Optional[List[int]] = Query(default=None),
     faculty: Optional[int] = Query(default=None),
 ):
     time_start = time.time()
@@ -138,15 +146,13 @@ async def get_ratings(
     filters = {}
     if achievementCategory:
         filters["achievementCategory"] = [
-            {"value": achievementCategory}
-        ]  # Оборачиваем в список, как ты и ожидал
+            {"value": cat} for cat in achievementCategory
+        ]
     if faculty:
         filters["faculty"] = [
             {"value": faculty}
         ]  # Оборачиваем в список, как ты и ожидал
 
-    ratings = aggregate_ratings(
-        raw_data, filters=filters
-    )  # Передаем фильтры в aggregate_ratings
+    ratings = aggregate_ratings(raw_data, filters=filters)
     ic(ratings)
     return ratings
