@@ -1,25 +1,11 @@
 import asyncio
-import datetime
-import os
 import time
-import uuid
-from typing import Union, List
 
 import jmespath
 from icecream import ic
 import aiohttp
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    Request,
-    Response,
-    Header,
-    HTTPException,
-    Form,
-    UploadFile,
-    File,
-)
+from fastapi import APIRouter
 
 
 from modules.service_account import get_service_access_token
@@ -55,6 +41,3 @@ async def worksForVerifications():
         ic(time.time() - time_start)
         return parsed_works
 
-
-if __name__ == "__main__":
-    asyncio.run(worksForVerifications())
