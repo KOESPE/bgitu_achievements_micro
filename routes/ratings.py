@@ -5,7 +5,9 @@ import jmespath
 import aiohttp
 
 from fastapi import APIRouter, Query
+from starlette.responses import StreamingResponse
 
+from modules.diagrams import get_ratings_data, create_radar_chart
 from modules.service_account import get_service_access_token
 
 ratings_router = APIRouter()
@@ -22,7 +24,6 @@ def merge_json(data1, data2, using_types=False):
         combined_list = [json.loads(item) for item in set(list1_str + list2_str)]
         combined_data[key] = combined_list
     return combined_data
-
 
 
 def aggregate_ratings(data, filters=None):
@@ -205,58 +206,8 @@ async def get_ratings(
     return ratings
 
 
-@ratings_router.get("/getDiagramData")
-async def get_ratings(studentId: int):
-    typeid_data = [
-        {"typeID": [1, 44, 2], "name": "Публикации и учебные материалы"},
-        {"typeID": [43, 61, 62, 65, 66, 67, 68, 73], "name": "Научная деятельность"},
-        {"typeID": [64, 76, 63, 60, 77], "name": "Признание и развитие"},
-        {"typeID": [47, 49, 78, 80, 81], "name": "НИР и Инновации"},
-        {"typeID": [8, 72, 74, 75], "name": "Гранты и НИРС"},
-        {"typeID": [39, 50, 6, 42, 7], "name": "РИД и интеллектуальная собственность"},
-        {"typeID": [9], "name": "Научные стажировки"},
-        {"typeID": [3, 52, 70], "name": "Конкурсы"},
-        {"typeID": [4, 5], "name": "Выставки и Конференции"},
-        {"typeID": [11, 15, 33, 32, 34, 35], "name": "Спорт и соревнования"},
-        {"typeID": [16, 17], "name": "Творчество"},
-        {
-            "typeID": [18, 19, 20, 21, 22, 23, 24, 25, 26],
-            "name": "Общественная деятельность",
-        },
-    ]
-
-    async with aiohttp.ClientSession() as http_session:
-        auth_token = await get_service_access_token()
-        req = await http_session.get(
-            url=f"https://eos.bgitu.ru/api/Portfolio/ListWorks?userID=-{studentId}&allWorks=true",
-            cookies={"authToken": auth_token},
-        )
-        data = await req.json()
-    all_works = data["data"]["listWorks"]
-
-    # Все данные
-    category_work_all = {}
-    category_work_verified = {}
-
-    for category in typeid_data:
-        category_work_all[category["name"]] = sum(
-            work["ballOfWork"]
-            for work in all_works
-            if work["typeID"] in category["typeID"] and work["ballOfWork"] > 0
-        )
-        category_work_verified[category["name"]] = sum(
-            work["ballOfWork"]
-            for work in all_works
-            if work["typeID"] in category["typeID"]
-            and work["ballOfWork"] > 0
-            and work["status"] == 13
-        )
-
-    all_data_list = [
-        {"name": name, "value": value} for name, value in category_work_all.items()
-    ]
-    verified_data_list = [
-        {"name": name, "value": value} for name, value in category_work_verified.items()
-    ]
-
-    return {"allData": all_data_list, "VerifiedData": verified_data_list}
+@ratings_router.get("/getDiagram")
+async def get_diagram(studentId: int):
+    data = await get_ratings_data(studentId)
+    buf = create_radar_chart(data)
+    return StreamingResponse(buf, media_type="image/png")
