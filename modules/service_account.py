@@ -81,5 +81,40 @@ async def is_token_valid(auth_token: str) -> bool:
         return True if req.status == 200 else False
 
 
-if __name__ == "__main__":
-    asyncio.run(get_service_access_token())
+async def test_playwright():
+
+    login = settings.SERVICE_ACCOUNT_LOGIN
+    password = settings.SERVICE_ACCOUNT_PASSWORD
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+
+        # Открываем страницу логина
+        URL = "https://eos.bgitu.ru/Account/Login.aspx"
+        await page.goto(URL)
+
+        # Вводим логин
+        await page.fill("#ctl00_MainContent_ucLoginFormPage_tbUserName_I", login)
+
+        # Вводим пароль
+        await page.fill(
+            "#ctl00_MainContent_ucLoginFormPage_tbPassword_I_CLND", password
+        )
+        await page.press(
+            "#ctl00_MainContent_ucLoginFormPage_tbPassword_I_CLND", "Enter"
+        )  # Нажимаем Enter
+
+        # Ждем редиректа и загрузки новой страницы
+        await page.wait_for_timeout(4000)
+
+        # Достаем authToken из куков
+        cookies = await page.context.cookies()
+        auth_token = next(
+            (cookie["value"] for cookie in cookies if cookie["name"] == "authToken"),
+            None,
+        )
+
+        # Закрываем браузер
+        await browser.close()
+
