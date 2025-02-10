@@ -5,16 +5,17 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from modules.service_account import test_playwright
 from routes.achievements import achievements_router
 from routes.ratings import ratings_router
 from routes.users import users_router
 
-logging.basicConfig(level=logging.INFO, filename="log.log")
+# logging.basicConfig(level=logging.INFO, filename="log.log")
 
 
 async def lifespan():
     # await db_init()
-    ...
+    await test_playwright()
     # yield
 
 
